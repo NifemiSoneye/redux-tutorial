@@ -19,6 +19,18 @@ export const fetchPosts = createAsyncThunk("posts/fetchPosts", async () => {
     return err.message;
   }
 });
+
+export const addNewPost = createAsyncThunk(
+  "posts/addNewPost",
+  async (initialPost) => {
+    try {
+      const response = await axios.post(POSTS_URL, initialPost);
+      return response.data;
+    } catch (err) {
+      return err.message;
+    }
+  }
+);
 const postsSlice = createSlice({
   name: "posts",
   initialState,
@@ -80,6 +92,31 @@ const postsSlice = createSlice({
       .addCase(fetchPosts.rejected, (state, action) => {
         state.status = "failed";
         state.error = action.error.message;
+      })
+      .addCase(addNewPost.fulfilled, (state, action) => {
+        // Fix for API post IDs:
+        // Creating sortedPosts & assigning the id
+        // would be not be needed if the fake API
+        // returned accurate new post IDs
+        const sortedPosts = state.posts.sort((a, b) => {
+          if (a.id > b.id) return 1;
+          if (a.id < b.id) return -1;
+          return 0;
+        });
+        action.payload.id = sortedPosts[sortedPosts.length - 1].id + 1;
+        // End fix for fake API post IDs
+
+        action.payload.userId = Number(action.payload.userId);
+        action.payload.date = new Date().toISOString();
+        action.payload.reactions = {
+          thumbsUp: 0,
+          hooray: 0,
+          heart: 0,
+          rocket: 0,
+          eyes: 0,
+        };
+        console.log(action.payload);
+        state.posts.push(action.payload);
       });
   },
 });
