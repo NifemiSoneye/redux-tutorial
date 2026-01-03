@@ -11,7 +11,9 @@ const initialState = postsAdapter.getInitialState({});
 export const extendedApiSlice = apiSlice.injectEndpoints({
   endpoints: (builder) => ({
     getPosts: builder.query({
-      query: () => (responseData) => {
+      query: () => "/posts", // ← Just return the URL string
+      transformResponse: (responseData) => {
+        // ← Add this line
         let min = 1;
         const loadedPosts = responseData.map((post) => {
           if (!post?.date)
@@ -28,10 +30,15 @@ export const extendedApiSlice = apiSlice.injectEndpoints({
         });
         return postsAdapter.setAll(initialState, loadedPosts);
       },
-      providesTags: (result, error, arg) => [
-        { type: "Post", id: "List" },
-        ...result.ids.map((id) => ({ type: "Post", id })),
-      ],
+      providesTags: (result, error, arg) => {
+        if (!result?.ids) {
+          return [{ type: "Post", id: "List" }];
+        }
+        return [
+          { type: "Post", id: "List" },
+          ...result.ids.map((id) => ({ type: "Post", id })),
+        ];
+      },
     }),
     getPostsByUserId: builder.query({
       query: (id) => `/posts/?userId=${id}`,
@@ -52,9 +59,13 @@ export const extendedApiSlice = apiSlice.injectEndpoints({
         });
         return postsAdapter.setAll(initialState, loadedPosts);
       },
-      providesTags: (result, error, arg) => [
-        ...result.ids.map((id) => ({ type: "Post", id })),
-      ],
+      providesTags: (result, error, arg) => {
+        // Add this safety check
+        if (!result?.ids) {
+          return [];
+        }
+        return result.ids.map((id) => ({ type: "Post", id }));
+      },
     }),
     addNewPost: builder.mutation({
       query: (initialPost) => ({
@@ -87,10 +98,60 @@ export const extendedApiSlice = apiSlice.injectEndpoints({
       }),
       invalidatesTags: (result, error, arg) => [{ type: "Post", id: arg.id }],
     }),
+
+    deletePost: builder.mutation({
+      query: ({ id }) => ({
+        url: `/posts/${id}`,
+        method: "DELETE",
+        body: { id },
+      }),
+      invalidatesTags: (result, error, arg) => [{ type: "Post", id: arg.id }],
+    }),
+
+    addReaction: builder.mutation({
+      query: ({ postId, reactions }) => ({
+        url: `posts/${postId}`,
+        method: "PATCH",
+        // In a real app, we'd probably need to base this on user ID somehow
+        // so that a user can't do the same reaction more than once
+        body: { reactions },
+      }),
+      async onQueryStarted(
+        { postId, reactions },
+        { dispatch, queryFulfilled }
+      ) {
+        // `updateQueryData` requires the endpoint name and cache key arguments,
+        // so it knows which piece of cache state to update
+        const patchResult = dispatch(
+          // updateQueryData takes three arguments: the name of the endpoint to update, the same cache key value used to identify the specific cached data, and a callback that updates the cached data.
+          extendedApiSlice.util.updateQueryData(
+            "getPosts",
+            "getPosts",
+            (draft) => {
+              // The `draft` is Immer-wrapped and can be "mutated" like in createSlice
+              const post = draft.entities[postId];
+              if (post) post.reactions = reactions;
+            }
+          )
+        );
+        try {
+          await queryFulfilled;
+        } catch {
+          patchResult.undo();
+        }
+      },
+    }),
   }),
 });
 
-export const { useGetPostsQuery, useGetPostsByUserIdQuery } = extendedApiSlice;
+export const {
+  useGetPostsQuery,
+  useGetPostsByUserIdQuery,
+  useAddNewPostMutation,
+  useUpdatePostMutation,
+  useDeletePostMutation,
+  useAddReactionMutation,
+} = extendedApiSlice;
 
 export const selectPostsResult = extendedApiSlice.endpoints.getPosts.select();
 

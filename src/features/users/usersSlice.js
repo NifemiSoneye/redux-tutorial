@@ -17,7 +17,7 @@ export const fetchUsers = createAsyncThunk("posts/fetchUsers", async () => {
 const userSlice = createSlice({
   name: "users",
   initialState,
-  reudcers: {},
+  reducers: {},
   extraReducers(builder) {
     builder.addCase(fetchUsers.fulfilled, (state, action) => {
       return action.payload;
@@ -28,7 +28,7 @@ const userSlice = createSlice({
 export const selectAllUsers = (state) => state.users;
 
 export const selectUserById = (state, userId) => {
-  state.users.find((user) => user.id === userId);
+  return state.users.find((user) => user.id === userId);
 };
 
 export default userSlice.reducer;
